@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./icon.png" />
+  <link rel="shortcut icon" href="./icon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>開團頁面</title>
+
+  <!-- Firebase compat SDK（9.x） -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    /* ====== 永遠保留捲軸，避免 SweetAlert2 顯示/隱藏時左右跳動 ====== */
+    html, body {
+      overflow-y: scroll;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #333;
+    }
+
+    /* 覆寫 SweetAlert2 加到 html/body 的 class，保持原本 100% 高度 */
+    html.swal2-shown,
+    body.swal2-shown,
+    html.swal2-height-auto,
+    body.swal2-height-auto {
+      height: 100% !important;
+    }
+
+    /* ====== 容器與卡片 ====== */
+    .wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* 改用 viewport 單位，確保滿版置中 */
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      position: relative; /* 讓絕對定位的返回按鈕、loadingOverlay 相對於 card */
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      max-width: 360px;
+      width: 100%;
+      padding: 30px 20px;
+      /* 新增：設定最小高度，避免載入前後跳動 */
+      min-height: 450px;
+    }
+
+    /* ====== 載入遮罩層 ====== */
+    .loading-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .card header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .card header h1 {
+      font-size: 26px;
+      margin-bottom: 8px;
+      color: #2c3e50;
+    }
+
+    /* ====== 返回按鈕 ====== */
+    .back-btn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+      background: linear-gradient(90deg, #3498db, #2980b9);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      z-index: 10;
+    }
+    .back-btn:hover { background: linear-gradient(90deg, #2980b9, #3498db); }
+    .back-btn:active { transform: translateY(2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); }
+
+    /* ====== 下拉選單和列表 ====== */
+    select {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      max-height: 200px;
+      min-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+    li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f9f9f9;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    li button {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      font-size: 16px;
+      background: linear-gradient(90deg, #e4695b, #e4695b);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+    li button:hover { background: linear-gradient(90deg, #e4695b, #e4695b); }
+    li button:active { transform: translateY(2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); }
+    li button:disabled {
+      background: #bdc3c7 !important;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    /* ====== 建立開團按鈕 ====== */
+    .main-btn {
+      width: 100%;
+      padding: 14px 0;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      color: #fff;
+      background: linear-gradient(90deg, #1abc9c, #16a085);
+      margin-bottom: 8px;
+    }
+    .main-btn:hover:not(:disabled) {
+      background: linear-gradient(90deg, #16a085, #1abc9c);
+    }
+    .main-btn:disabled {
+      background: #bdc3c7 !important;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 20px 12px; min-height: auto; }
+      select, .main-btn { font-size: 16px; padding: 12px; }
+      .back-btn { font-size: 12px; padding: 5px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+      </div>
+
+      <button class="back-btn" onclick="window.location.href='index.html'">← 返回</button>
+      <br>
+      <header><h1>📦 今日開團</h1></header>
+
+      <select id="restaurantSelect" disabled aria-label="選擇餐廳">
+       <option value="">載入餐廳中…</option>
+      </select>
+
+      <ul id="menuList"></ul>
+
+      <button class="main-btn" id="createBtn" onclick="createSession()" disabled>
+        📢 建立開團
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const restaurantSelect = document.getElementById('restaurantSelect');
+    const createBtn = document.getElementById('createBtn');
+    const menuList = document.getElementById('menuList');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    let currentMenu = [];
+    let isCreating = false;
+
+    const firebaseConfig = {
+      apiKey: "//FIREBASE///",
+      authDomain: "//FIREBASE///",
+      projectId: "//FIREBASE///",
+      storageBucket: "//FIREBASE///",
+      messagingSenderId: "//FIREBASE///",
+      appId: "//FIREBASE///"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function loadRestaurants() {
+      loadingOverlay.style.display = 'flex';
+      try {
+        const snap = await db.collection("restaurants").get();
+        restaurantSelect.innerHTML = '<option value="">請選擇餐廳</option>';
+        restaurantSelect.disabled = false;
+        snap.forEach(doc => {
+          const opt = document.createElement("option");
+          opt.value = doc.id;
+          opt.text = doc.id;
+          restaurantSelect.append(opt);
+        });
+      } catch (e) {
+        Swal.fire("載入錯誤", "無法讀取餐廳資料", "error");
+      } finally {
+        loadingOverlay.style.display = 'none';
+      }
+    }
+
+    restaurantSelect.addEventListener('change', async () => {
+      const val = restaurantSelect.value;
+      menuList.innerHTML = '';
+      createBtn.disabled = true;
+      if (!val) return;
+      try {
+        const doc = await db.collection("restaurants").doc(val).get();
+        if (doc.exists) {
+          currentMenu = [...(doc.data().menu||[])];
+          renderMenu();
+          createBtn.disabled = !currentMenu.length;
+        } else {
+          Swal.fire("錯誤", "找不到餐廳資料", "error");
+        }
+      } catch (e) {
+        Swal.fire("錯誤", e.message, "error");
+      }
+    });
+
+    function renderMenu(){
+      menuList.innerHTML = '';
+      currentMenu.forEach((item,i)=>{
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.textContent = item;
+        const btn = document.createElement('button');
+        btn.textContent='刪'; btn.onclick=()=>{
+          currentMenu.splice(i,1);
+          renderMenu();
+          createBtn.disabled = !currentMenu.length;
+        };
+        li.append(span, btn);
+        menuList.append(li);
+      });
+    }
+
+    async function generateSessionId() {
+  const now = new Date();
+
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const ymd = `${y}${m}${d}`;
+
+  const prefix = `${ymd}-`;
+
+  const snap = await db.collection("sessions")
+    .orderBy("id", "desc")
+    .limit(1)
+    .get();
+
+  let nextSeq = 1;
+
+  if (!snap.empty) {
+    const lastId = snap.docs[0].data().id;
+    if (lastId.startsWith(prefix)) {
+      const lastSeq = parseInt(lastId.split('-')[1]);
+      nextSeq = lastSeq + 1;
+    }
+  }
+
+  return `${prefix}${String(nextSeq).padStart(2, '0')}`;
+}
+
+    async function createSession(){
+      if(isCreating) return;
+      isCreating=true;
+      const r=restaurantSelect.value;
+      if(!r){
+        Swal.fire("請先選擇餐廳","", "warning");
+        isCreating=false;
+        return;
+      }
+      Swal.fire({title:'開團中...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+      const id = await generateSessionId();
+      try{
+        const rd=await db.collection("restaurants").doc(r).get();
+        const img=rd.exists?rd.data().imageUrl||'':'';
+        await db.collection("sessions").doc(id).set({
+          id, restaurantName:r, imageUrl:img,
+          timeCreated:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection("menus").doc(id).set({restaurantName:r,menu:currentMenu});
+        Swal.fire("✅ 開團成功！","", "success").then(()=>location.href='index.html');
+      }catch(e){
+        Swal.fire("❌ 開團失敗",e.message,"error");
+        isCreating=false;
+      }
+    }
+
+    window.onload=loadRestaurants;
+  </script>
+</body>
+</html>

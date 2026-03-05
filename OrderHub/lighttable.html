@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LightTable 編輯器</title>
+
+  <!-- Firebase & SweetAlert2 -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #333;
+    }
+    .wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      position: relative;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+      padding: 30px 20px;
+    }
+    .back-btn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+      background: #2980b9;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      z-index: 10;
+    }
+    .back-btn:hover { background: #2471A3; }
+    .back-btn:active { transform: translateY(2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); }
+    .card h1 {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 24px;
+      color: #2c3e50;
+    }
+    .control-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .control-group input {
+      flex: 1;
+      padding: 8px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    .action-list {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px 0;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+    .btn-primary { background: linear-gradient(90deg, #1abc9c, #16a085); }
+    .btn-primary:hover:not(:disabled) { background: linear-gradient(90deg, #16a085, #1abc9c); }
+    .btn-secondary { background: linear-gradient(90deg, #3498db, #2980b9); }
+    .btn-secondary:hover:not(:disabled) { background: linear-gradient(90deg, #2980b9, #3498db); }
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    td {
+      width: 60px;
+      height: 60px;
+      border: 1px solid #ccc;
+      text-align: center;
+      vertical-align: middle;
+      cursor: pointer;
+      background: #fff;
+    }
+    td:hover { background: #eef; }
+    @media (max-width: 480px) {
+      .card { padding: 20px 12px; }
+      .btn { font-size: 16px; padding: 12px; }
+      .back-btn { font-size: 12px; padding: 5px 8px; }
+    }
+
+    /* Loading Spinner */
+    #loadingOverlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .spinner {
+      border: 8px solid #f3f3f3;
+      border-top: 8px solid #3498db;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .control-group input,
+.control-group .btn {
+  height: 40px;
+  font-size: 14px;
+  padding: 0 12px;
+}
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="wrapper">
+    <div class="card">
+      <button class="back-btn" onclick="window.location.href='admin.html'">← 返回</button>
+      <br/>
+      <h1>🔧 LightTable 編輯器</h1>
+
+      <div class="control-group" style="display: flex; gap: 10px; align-items: center;">
+  <input type="number" id="rows" min="1" max="20" placeholder="行數">
+  <input type="number" id="cols" min="1" max="20" placeholder="列數">
+  <button class="btn btn-secondary" onclick="generateGrid()" style="padding: 10px 16px; white-space: nowrap;">🔄 產生表格</button>
+</div>
+      <div class="table-container">
+        <table id="seatTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "//FIREBASE///",
+      authDomain: "//FIREBASE///",
+      projectId: "//FIREBASE///",
+      storageBucket: "//FIREBASE///",
+      messagingSenderId: "//FIREBASE///",
+      appId: "//FIREBASE///"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const seatTable = document.getElementById("seatTable");
+
+    async function loadGridSettings() {
+      try {
+        const doc = await db.collection("staffList").doc("tableSize").get();
+        if (doc.exists) {
+          const { rows, cols } = doc.data();
+          document.getElementById("rows").value = rows;
+          document.getElementById("cols").value = cols;
+        } else {
+          document.getElementById("rows").value = 7;
+          document.getElementById("cols").value = 6;
+        }
+      } catch (err) {
+        console.error("無法讀取表格設定", err);
+        Swal.fire({ icon: 'error', title: '讀取設定失敗', text: err.message });
+      }
+    }
+
+    async function generateGrid() {
+      const rows = parseInt(document.getElementById("rows").value, 10) || 0;
+      const cols = parseInt(document.getElementById("cols").value, 10) || 0;
+      if (rows < 1 || cols < 1) {
+        Swal.fire({ icon: 'warning', title: '請輸入有效的行數和列數' });
+        return;
+      }
+
+      await db.collection("staffList").doc("tableSize").set({ rows, cols });
+
+      seatTable.innerHTML = "";
+      for (let r = 0; r < rows; r++) {
+        const tr = document.createElement("tr");
+        for (let c = 0; c < cols; c++) {
+          const td = document.createElement("td");
+          td.dataset.row = r;
+          td.dataset.col = c;
+          td.onclick = () => editSeat(td);
+          tr.appendChild(td);
+        }
+        seatTable.appendChild(tr);
+      }
+      loadFromFirebase();
+    }
+
+    function editSeat(cell) {
+      Swal.fire({
+        title: '你想要做什麼？',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: '輸入人名',
+        denyButtonText: '清空這格',
+        cancelButtonText: '取消'
+      }).then(result => {
+        if (result.isDenied) {
+          delete cell.dataset.code;
+          delete cell.dataset.name;
+          delete cell.dataset.extension;
+          cell.innerHTML = '';
+          saveToFirebase();
+        } else if (result.isConfirmed) {
+          Swal.fire({
+            title: '請輸入代號',
+            input: 'text',
+            inputValue: cell.dataset.code || '',
+            showCancelButton: true,
+            confirmButtonText: '下一步',
+            inputValidator: v => !v.trim() && '代號不能為空'
+          }).then(codeRes => {
+            if (!codeRes.isConfirmed) return;
+            const code = codeRes.value.trim();
+            Swal.fire({
+              title: '請輸入姓名',
+              input: 'text',
+              inputValue: cell.dataset.name || '',
+              showCancelButton: true,
+              confirmButtonText: '下一步',
+              inputValidator: v => !v.trim() && '姓名不能為空'
+            }).then(nameRes => {
+              if (!nameRes.isConfirmed) return;
+              const name = nameRes.value.trim();
+              Swal.fire({
+                title: '請輸入分機',
+                input: 'text',
+                inputValue: cell.dataset.extension || '',
+                showCancelButton: true,
+                confirmButtonText: '儲存',
+                inputValidator: v => !v.trim() && '分機不能為空'
+              }).then(extRes => {
+                if (!extRes.isConfirmed) return;
+                const extension = extRes.value.trim();
+                cell.dataset.code = code;
+                cell.dataset.name = name;
+                cell.dataset.extension = extension;
+                cell.innerHTML = `${name}<br><span style="font-size: 12px; color: #777;">${extension}</span>`;
+                saveToFirebase();
+              });
+            });
+          });
+        }
+      });
+    }
+
+    async function saveToFirebase() {
+  const data = [];
+  seatTable.querySelectorAll('td').forEach(cell => {
+    const { code, name, extension, row, col } = cell.dataset;
+    if (code && name && extension) {
+      data.push({
+        code: code.trim(),
+        name: name.trim(),
+        extension: extension.trim(),
+        seatRow: +row,
+        seatCol: +col
+      });
+    }
+  });
+
+  const ref = db.collection("staffList");
+  const batch = db.batch();
+
+  try {
+    const existing = await ref.get();
+
+    // 只刪除非 tableSize 的資料
+    existing.forEach(doc => {
+      if (doc.id !== "tableSize") {
+        batch.delete(doc.ref);
+      }
+    });
+
+    // 儲存新的座位資料
+    data.forEach(person => batch.set(ref.doc(person.code), person));
+
+    await batch.commit();
+  } catch (err) {
+    console.error(err);
+    Swal.fire({ icon: 'error', title: '儲存失敗', text: err.message });
+  }
+}
+
+
+    async function loadFromFirebase() {
+      try {
+        const snapshot = await db.collection("staffList").get();
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const { seatRow, seatCol, name, extension, code } = data;
+          const row = seatTable.rows[seatRow];
+          if (!row) return;
+          const cell = row.cells[seatCol];
+          if (!cell) return;
+          cell.dataset.code = code;
+          cell.dataset.name = name;
+          cell.dataset.extension = extension;
+          cell.innerHTML = `${name}<br><span style="font-size: 12px; color: #777;">${extension}</span>`;
+        });
+      } catch (err) {
+        console.error(err);
+        Swal.fire({ icon: 'error', title: '讀取資料失敗', text: err.message });
+      }
+    }
+
+    window.addEventListener('load', async () => {
+      await loadGridSettings();
+      await generateGrid();
+      document.getElementById('loadingOverlay').style.display = 'none';
+    });
+  </script>
+</body>
+</html>

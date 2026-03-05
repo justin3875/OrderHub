@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>統計排行榜</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #333;
+    }
+    .wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      position: relative;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      max-width: 800px;
+      width: 100%;
+      padding: 30px 20px;
+    }
+    .card h1 {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 24px;
+      color: #2c3e50;
+    }
+    .section {
+      margin-top: 24px;
+    }
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: #2980b9;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+      font-size: 14px;
+    }
+    th {
+      background: #ecf0f1;
+    }
+    #progressBar {
+      width: 100%;
+      height: 6px;
+      background: #eee;
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 9999;
+    }
+    #progressBarInner {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(to right, #3498db, #1abc9c);
+      transition: width 0.2s ease;
+    }
+    #progressText {
+      position: fixed;
+      top: 8px;
+      right: 12px;
+      font-size: 12px;
+      color: #555;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      z-index: 10000;
+      font-weight: bold;
+    }
+    .back-btn, .refresh-btn {
+      position: absolute;
+      top: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+      background: linear-gradient(90deg, #3498db, #2980b9);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      z-index: 10;
+    }
+    .back-btn { left: 10px; }
+    .refresh-btn { right: 10px; }
+    .back-btn:active, .refresh-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    }
+    .back-btn:hover, .refresh-btn:hover {
+      background: linear-gradient(90deg, #2980b9, #3498db);
+    }
+    .timestamp {
+      text-align: center;
+      font-size: 12px;
+      margin-top: 4px;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <div id="progressBar"><div id="progressBarInner"></div></div>
+  <div id="progressText">0%</div>
+  <div class="wrapper">
+    <div class="card">
+      <button class="back-btn" onclick="window.location.href='admin.html'">← 返回</button>
+      <button class="refresh-btn" onclick="recalculateStats()">🔄 更新資料</button>
+      <br/>
+      <h1>統計排行榜</h1>
+      <div class="timestamp" id="lastUpdated"></div>
+
+      <div class="section">
+        <h2>🥇 歷史訂餐次數排行</h2>
+        <table id="historyCountTable">
+          <thead><tr><th>名次</th><th>代號</th><th>次數</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>📅 本月訂餐次數排行</h2>
+        <table id="monthlyCountTable">
+          <thead><tr><th>名次</th><th>代號</th><th>次數</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>💰 歷史總金額排行</h2>
+        <table id="amountTable">
+          <thead><tr><th>名次</th><th>代號</th><th>總金額</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>🏠 最常訂購的餐廳排行</h2>
+        <table id="restaurantTable">
+          <thead><tr><th>名次</th><th>餐廳名稱</th><th>次數</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>🍱 最常被訂購的餐點排行</h2>
+        <table id="itemTable">
+          <thead><tr><th>名次</th><th>餐廳｜餐點</th><th>次數</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "//FIREBASE///",
+      authDomain: "//FIREBASE///",
+      projectId: "//FIREBASE///"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    function updateProgress(percent) {
+      document.getElementById("progressBarInner").style.width = percent + "%";
+      document.getElementById("progressText").textContent = percent + "%";
+    }
+
+    function cleanText(text) {
+      return (text || "").replace(/[^一-龥]/g, "").replace(/元/g, "");
+    }
+
+    function renderTable(tableId, dataMap, isCurrency = false) {
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      const sorted = Object.entries(dataMap || {}).sort((a,b) => b[1] - a[1]).slice(0, 5);
+      tbody.innerHTML = sorted.map(([key, val], i) => `
+        <tr><td>${i + 1}</td><td>${key}</td><td>${isCurrency ? val + ' 元' : val}</td></tr>
+      `).join("");
+    }
+
+    function displayStats(data) {
+      renderTable("historyCountTable", data.historyCountMap);
+      renderTable("monthlyCountTable", data.monthlyCountMap);
+      renderTable("amountTable", data.amountMap, true);
+      renderTable("restaurantTable", data.restaurantMap);
+      renderTable("itemTable", data.itemMap);
+      const ts = data.generatedAt?.toDate?.();
+      if (ts) document.getElementById("lastUpdated").textContent = `最後更新：${ts.toLocaleString()}`;
+    }
+
+    async function loadCachedStats() {
+      const doc = await db.collection("rank").doc("latest").get();
+      if (doc.exists) {
+        displayStats(doc.data());
+      } else {
+        document.getElementById("lastUpdated").textContent = "尚未產生統計資料";
+      }
+    }
+
+    async function recalculateStats() {
+      updateProgress(10);
+      const sessions = await db.collection("sessions").get();
+      updateProgress(25);
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const countMap = {}, monthMap = {}, amountMap = {}, restaurantMap = {}, itemMap = {};
+
+      let processed = 0;
+      for (const session of sessions.docs) {
+        const sessionId = session.id;
+        let restaurant = cleanText(session.data().restaurantName);
+        restaurantMap[restaurant] = (restaurantMap[restaurant] || 0) + 1;
+
+        const itemsSnap = await db.collection("orders").doc(sessionId).collection("items").get();
+
+        itemsSnap.forEach(doc => {
+          const data = doc.data();
+          const code = data.code || "未知";
+          const time = data.time?.toDate();
+
+          countMap[code] = (countMap[code] || 0) + 1;
+          if (time && time.getFullYear() === currentYear && time.getMonth() === currentMonth) {
+            monthMap[code] = (monthMap[code] || 0) + 1;
+          }
+
+          const item = cleanText(data.item);
+          const key = `${restaurant}｜${item}`;
+          itemMap[key] = (itemMap[key] || 0) + 1;
+
+          const match = data.item.match(/(\d+)\s*元/);
+          if (match) {
+            const amount = parseInt(match[1]);
+            amountMap[code] = (amountMap[code] || 0) + amount;
+          }
+        });
+
+        processed++;
+        updateProgress(25 + Math.floor((processed / sessions.docs.length) * 60));
+      }
+
+      const stats = {
+        generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        historyCountMap: countMap,
+        monthlyCountMap: monthMap,
+        amountMap,
+        restaurantMap,
+        itemMap
+      };
+
+      await db.collection("rank").doc("latest").set(stats);
+      document.getElementById("lastUpdated").textContent = "資料已更新 ✔";
+      updateProgress(100);
+      setTimeout(() => {
+        document.getElementById("progressBar").style.display = "none";
+        document.getElementById("progressText").style.display = "none";
+      }, 800);
+      loadCachedStats();
+    }
+
+    loadCachedStats();
+  </script>
+</body>
+</html>

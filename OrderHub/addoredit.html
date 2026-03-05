@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>新增 / 編輯餐廳</title>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "//FIREBASE///",
+      authDomain: "//FIREBASE///",
+      projectId: "//FIREBASE///",
+      storageBucket: "//FIREBASE///",
+      messagingSenderId: "//FIREBASE///",
+      appId: "//FIREBASE///"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+  </script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: "Helvetica Neue", Arial, sans-serif; background: linear-gradient(135deg, #f5f7fa, #c3cfe2); color: #333; }
+    .wrapper { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 20px; }
+    .card { position: relative; background-color: #ffffff; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); max-width: 360px; width: 100%; padding: 45px 20px 30px 20px; overflow: hidden; } 
+    .loader-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+    .loader-spinner { width: 40px; height: 40px; border: 4px solid #ccc; border-top-color: #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { font-size: 14px; color: #555; font-weight: bold; }
+    .top-bar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 10; }
+    .nav-btn { padding: 6px 10px; font-size: 13px; color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: transform 0.1s, background 0.2s; white-space: nowrap; }
+    .nav-btn:active { transform: translateY(2px); }
+    .back-btn { background: #2980b9; }
+    .back-btn:hover { background: #2471A3; }
+    .summary-btn { background: #8e44ad; }
+    .summary-btn:hover { background: #7d3c98; }
+    .card h1 { text-align: center; margin: 15px 0 12px 0; font-size: 24px; color: #2c3e50; }
+    select, input[type="text"], textarea, button { font-family: "Helvetica Neue", Arial, sans-serif; }
+    select, input[type="text"] { width: 100%; padding: 10px; font-size: 16px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    ul { list-style: none; padding: 0; max-width: 100%; margin-bottom: 12px; }
+    li { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 8px 12px; margin-bottom: 6px; border: 1px solid #ddd; border-radius: 6px; cursor: default; position: relative; font-size: 16px; flex-wrap: nowrap; white-space: nowrap; }
+    li.dragging { opacity: 0.5; background-color: #ffeeba; }
+    li.drag-over { border: 2px dashed #007bff; }
+    li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 8px; cursor: text; }
+    li .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    li .actions button { width: 26px; height: 26px; padding: 0; border: none; border-radius: 4px; background: #d1d1d1; font-size: 14px; cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; flex-shrink: 0; }
+    li .actions button:hover { background: #b0b0b0; }
+    #batchDialog { display: none; background: #ffffff; border: 1px solid #ccc; border-radius: 8px; padding: 20px; max-width: 320px; margin: 16px auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    #batchDialog textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+    #batchDialog button { width: 48%; padding: 8px 0; font-size: 14px; border: none; border-radius: 6px; cursor: pointer; color: #fff; }
+    #batchDialog button:first-child { background: #1abc9c; }
+    #batchDialog button:last-child { background: #e74c3c; }
+    .btn { width: 100%; padding: 12px 0; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; color: #fff; transition: transform 0.1s, box-shadow 0.2s; margin-bottom: 12px; background: linear-gradient(90deg, #1abc9c, #16a085); }
+    .btn:disabled { background: #bdc3c7 !important; cursor: not-allowed; opacity: 0.7; }
+    @media (max-width: 480px) { .card { padding: 45px 12px 20px 12px; } #batchDialog { margin: 8px auto; } }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div class="loader-overlay" id="loaderOverlay">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">載入中…</div>
+      </div>
+
+      <div class="top-bar">
+        <button class="nav-btn back-btn" onclick="window.location.href='admin.html'">← 返回</button>
+        <button class="nav-btn summary-btn" onclick="window.location.href='summary.html'">📊 返回訂單統計</button>
+      </div>
+
+      <h1>🍽️ 新增 / 編輯餐廳</h1>
+
+      <select id="restaurantSelect">
+        <option value="">➕ 新增餐廳</option>
+      </select>
+
+      <input type="text" id="restaurantName" placeholder="請輸入餐廳名稱" />
+      <input type="text" id="imageUrl" placeholder="外部圖片網址 (可選填)" oninput="updateImagePreview()" />
+      <img id="imagePreview" src="" alt="圖片預覽" style="display: none; max-width:100%; margin: 8px 0; border-radius:6px;" />
+
+      <ul id="menuList"></ul>
+
+      <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+        <input type="text" id="newMenuItem" placeholder="新增餐點…" style="flex: 1; margin-bottom: 0; height: 40px;"/>
+        <button onclick="addMenuItem()" style="padding: 0 20px; border: none; border-radius: 8px; cursor: pointer; color: #fff; background: linear-gradient(90deg, #1abc9c, #16a085); height: 40px;">＋新增</button>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="saveMenu(true)" style="background: #3cb7e7; flex: 1;">📁 儲存菜單</button>
+        <button class="btn" onclick="deleteRestaurant()" style="background: #e74c3c; flex: 1;">🗑️ 刪除餐廳</button>
+      </div>
+      <button class="btn" onclick="toggleBatch(true)">📋 批次增加餐點</button>
+      
+      <div style="text-align: center; font-size: 14px;">
+        上傳圖片請至 <a href="https://meee.com.tw/" target="_blank" rel="noopener">https://meee.com.tw/</a>
+      </div>
+
+      <div id="batchDialog">
+        <textarea id="batchTextarea" rows="6" placeholder="每行輸入一個餐點"></textarea>
+        <div style="display: flex; justify-content: space-between;">
+          <button onclick="submitBatchItems()">確定新增</button>
+          <button onclick="toggleBatch(false)">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    const refs = {
+      select: el('restaurantSelect'),
+      name: el('restaurantName'),
+      imgUrl: el('imageUrl'),
+      imgPrev: el('imagePreview'),
+      list: el('menuList'),
+      newItem: el('newMenuItem'),
+      batchBox: el('batchDialog'),
+      batchText: el('batchTextarea'),
+      overlay: el('loaderOverlay') 
+    };
+    
+    let currentMenu = [];
+    let draggedIndex = null;
+
+    function setLoading(isLoading) {
+      refs.overlay.style.display = isLoading ? 'flex' : 'none'; 
+    }
+
+    async function loadRestaurants() {
+      setLoading(true);
+      try {
+        const snapshot = await db.collection("restaurants").get();
+        refs.select.innerHTML = `<option value="">➕ 新增餐廳</option>`;
+        snapshot.forEach(doc => {
+          const opt = new Option(doc.id, doc.id);
+          refs.select.add(opt);
+        });
+        
+        const target = new URLSearchParams(window.location.search).get("restaurant");
+        if (target) {
+          refs.select.value = target;
+          await refs.select.onchange(); 
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    refs.select.onchange = async () => {
+      setLoading(true);
+      try {
+        const id = refs.select.value;
+        if (!id) {
+          refs.name.value = refs.imgUrl.value = "";
+          refs.imgPrev.style.display = 'none';
+          currentMenu = [];
+        } else {
+          const doc = await db.collection("restaurants").doc(id).get();
+          if (doc.exists) {
+            const data = doc.data();
+            refs.name.value = data.name || id;
+            refs.imgUrl.value = data.imageUrl || "";
+            currentMenu = data.menu || [];
+            updateImagePreview();
+          }
+        }
+        renderMenu();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    function updateImagePreview() {
+      const url = refs.imgUrl.value.trim();
+      refs.imgPrev.src = url;
+      refs.imgPrev.style.display = url ? 'block' : 'none';
+    }
+
+    function renderMenu() {
+  refs.list.innerHTML = '';
+
+  currentMenu.forEach((item, i) => {
+    const li = document.createElement("li");
+    li.dataset.index = i;
+
+    li.innerHTML = `
+      <span contenteditable="true">${item}</span>
+      <div class="actions">
+        <button onclick="removeMenuItem(${i})">❌</button>
+      </div>
+    `;
+
+    const span = li.querySelector('span');
+
+    span.onkeydown = e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        span.blur();
+      }
+    };
+
+    span.onblur = () => {
+      const val = span.textContent.trim();
+      if (val) {
+        currentMenu[i] = val;
+        saveMenu(false);
+      } else {
+        span.textContent = currentMenu[i];
+      }
+    };
+
+    refs.list.appendChild(li);
+  });
+}
+
+    function addMenuItem() {
+      const val = refs.newItem.value.trim();
+      if (val) {
+        currentMenu.push(val);
+        refs.newItem.value = '';
+        renderMenu();
+        saveMenu(false);
+      }
+    }
+
+    function removeMenuItem(index) {
+      currentMenu.splice(index, 1);
+      renderMenu();
+      saveMenu(false);
+    }
+
+    async function saveMenu(showSwal = false) {
+      const name = refs.name.value.trim();
+      if (!name) return showSwal && Swal.fire("請輸入餐廳名稱！", "", "warning");
+      
+      if (showSwal) setLoading(true);
+      try {
+        await db.collection("restaurants").doc(name).set({
+          name,
+          imageUrl: refs.imgUrl.value.trim(),
+          menu: currentMenu
+        });
+        if (showSwal) {
+          Swal.fire("💾 儲存成功！", "", "success");
+          loadRestaurants();
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (showSwal) setLoading(false);
+      }
+    }
+
+    async function deleteRestaurant() {
+      const id = refs.select.value;
+      if (!id) return Swal.fire("請先選擇要刪除的餐廳！", "", "warning");
+      const res = await Swal.fire({
+        icon: 'warning',
+        title: `確定要刪除「${id}」嗎？`,
+        showCancelButton: true,
+        confirmButtonText: '刪除',
+        cancelButtonText: '取消'
+      });
+      if (res.isConfirmed) {
+        setLoading(true);
+        try {
+          await db.collection("restaurants").doc(id).delete();
+          Swal.fire("🗑️ 刪除成功！", "", "success");
+          refs.select.value = "";
+          refs.select.dispatchEvent(new Event("change"));
+          loadRestaurants();
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+
+    function toggleBatch(show) {
+      refs.batchBox.style.display = show ? "block" : "none";
+      if (!show) refs.batchText.value = "";
+    }
+
+    function submitBatchItems() {
+      const items = refs.batchText.value.split('\n').map(s => s.trim()).filter(s => s);
+      if (!items.length) return Swal.fire("請輸入資料！", "", "warning");
+      currentMenu.push(...items);
+      renderMenu();
+      saveMenu(false);
+      toggleBatch(false);
+    }
+
+    loadRestaurants();
+  </script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>內壢分公司｜管理者後台</title>
+
+  <!-- Firebase compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      color: #333;
+    }
+    .wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100%;
+      padding: 20px;
+    }
+    .card {
+      position: relative;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      max-width: 360px;
+      width: 100%;
+      padding: 30px 20px;
+    }
+    .back-btn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+      background: linear-gradient(90deg, #3498db, #2980b9);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      z-index: 10;
+    }
+    .back-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    }
+    .back-btn:hover {
+      background: linear-gradient(90deg, #2980b9, #3498db);
+    }
+    .card h1 {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 24px;
+      color: #2c3e50;
+    }
+    .action-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 0;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      color: #fff;
+      width: 100%;
+    }
+    .btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    }
+    .btn:disabled {
+      background: #bdc3c7 !important;
+      cursor: not-allowed;
+      opacity: 0.7;
+      color: #fff;
+    }
+    .btn-primary {
+      background: linear-gradient(90deg, #1abc9c, #16a085);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(90deg, #16a085, #1abc9c);
+    }
+    .btn-secondary {
+      background: linear-gradient(90deg, #3498db, #2980b9);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: linear-gradient(90deg, #2980b9, #3498db);
+    }
+    .btn-danger {
+      background: linear-gradient(90deg, #e74c3c, #c0392b);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: linear-gradient(90deg, #c0392b, #e74c3c);
+    }
+
+    /* loading 遮罩樣式 */
+    .loader-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255,255,255,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+    }
+    .loader-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #ccc;
+      border-top-color: #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loader-text {
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <!-- loading 遮罩 -->
+      <div class="loader-overlay" id="loaderOverlay">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">處理中…</div>
+      </div>
+
+      <button class="back-btn" onclick="window.location.href='index.html'">← 返回</button>
+      <br/>
+      <h1>管理者功能選單</h1>
+
+      <div class="action-list">
+        <button class="btn btn-primary" onclick="location.href='addoredit.html'">
+          新增 / 編輯餐廳
+        </button>
+        <button class="btn btn-secondary" onclick="location.href='member.html'">
+          會員管理
+        </button>
+        <button class="btn btn-secondary" onclick="location.href='lighttable.html'">
+          訂餐總表
+        </button>
+        <button class="btn btn-secondary" onclick="location.href='firebase.html'">
+          Firebase 後台
+        </button>
+        <button class="btn btn-secondary" onclick="location.href='rank.html'">
+          統計排行榜
+        </button>
+
+        <button id="reopenBtn" class="btn btn-danger" disabled>
+          恢復開團
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "//FIREBASE///",
+      authDomain: "//FIREBASE///",
+      projectId: "//FIREBASE///",
+      storageBucket: "//FIREBASE///",
+      messagingSenderId: "//FIREBASE///",
+      appId: "//FIREBASE///"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const reopenBtn = document.getElementById("reopenBtn");
+    const loaderOverlay = document.getElementById("loaderOverlay");
+
+    async function checkOpenSession() {
+      const snapshot = await db.collection("sessions")
+        .orderBy("timeCreated", "desc")
+        .get();
+      for (const doc of snapshot.docs) {
+        if (!doc.data().closed) {
+          reopenBtn.disabled = true;
+          return;
+        }
+      }
+      reopenBtn.disabled = false;
+    }
+
+    reopenBtn.addEventListener("click", async () => {
+      const pwd = prompt("請輸入管理密碼以恢復開團狀態：");
+      if (pwd !== "666") {
+        return;
+      }
+
+      loaderOverlay.style.display = "flex"; 
+
+      try {
+        const snapshot = await db.collection("sessions")
+          .orderBy("timeCreated", "desc")
+          .limit(1)
+          .get();
+
+        if (!snapshot.empty) {
+          await snapshot.docs[0].ref.update({ closed: false });
+          window.location.href = "index.html";
+        } else {
+          alert("找不到任何開團紀錄！");
+          loaderOverlay.style.display = "none";
+        }
+      } catch (err) {
+        console.error(err);
+        alert("操作失敗，請查看 Console");
+        loaderOverlay.style.display = "none";
+      }
+    });
+
+    window.onload = checkOpenSession;
+  </script>
+</body>
+</html>

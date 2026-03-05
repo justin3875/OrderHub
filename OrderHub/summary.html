@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" sizes="16x16" href="./icon.png" />
+  <link rel="shortcut icon" href="./icon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>訂單統計與管理</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: "Helvetica Neue", Arial, sans-serif; background: linear-gradient(135deg, #f5f7fa, #c3cfe2); color: #333; }
+  .wrapper { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 10px; }
+  .card { position: relative; background: #fff; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); max-width: 500px; width: 100%; padding: 25px 10px; }
+  .back-btn, .session-select button, .update-btn, .delete-btn { cursor: pointer; border: none; border-radius: 4px; transition: 0.2s; }
+  .back-btn { position: absolute; top: 10px; left: 10px; padding: 8px 12px; background: #2980b9; color: #fff; z-index: 10; }
+  .session-select { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 10; }
+  .session-select select, .session-select button { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; }
+  .session-select button { background: #1abc9c; color: #fff; border: none; }
+  h1, h2, #restaurantName, #loading, #totalCount { text-align: center; }
+  h1 { margin-bottom: 16px; font-size: 24px; color: #2c3e50; }
+  h2 { font-size: 20px; margin-bottom: 12px; color: #2c3e50; }
+  #restaurantName { font-size: 16px; color: #7f8c8d; margin-bottom: 24px; }
+  #totalCount { font: bold 18px sans-serif; color: #555; margin-bottom: 20px; }
+  
+  /* Order Table */
+  #orderTable { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+  #orderTable th, #orderTable td { border: 1px solid #ccc; padding: 4px; vertical-align: middle; background: #fff; }
+  #orderTable th:nth-child(1), #orderTable td:nth-child(1) { width: 10%; text-align: center; }
+  #orderTable th:nth-child(2), #orderTable td:nth-child(2) { width: 15%; text-align: center; }
+  #orderTable th:nth-child(3), #orderTable td:nth-child(3) { width: 40%; }
+  #orderTable th:nth-child(4), #orderTable td:nth-child(4) { width: 25%; }
+  #orderTable th:nth-child(5), #orderTable td:nth-child(5) { width: 10%; text-align: center; }
+  #orderTable textarea { width: 100%; padding: 4px; font-size: 14px; resize: vertical; }
+  #orderTable input { width: 100%; max-width: 40px; text-align: center; }
+  .action-buttons { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .update-btn { background: #89e2d0; color: #fff; padding: 4px 6px; }
+  .delete-btn { background: #db5e5e; color: #fff; padding: 4px 6px; }
+  .back-btn:active,.session-select button:active,.update-btn:active,.delete-btn:active {
+  transform: translateY(2px);  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);}
+
+  /* Stats Table */
+  #itemStatsTable { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  #itemStatsTable th, #itemStatsTable td { border: 1px solid #ccc; padding: 6px 8px; font-size: 14px; }
+  #itemStatsTable th { background: #f8f9fa; }
+  #itemStatsTable td span { display: block; width: 100%; }
+
+  /* Light Table */
+  #lightTable { margin: 0 auto 20px; border-collapse: collapse; table-layout: fixed; }
+  #lightTable td { width: 45px; height: 40px; border: 1px solid #bbb; text-align: center; vertical-align: middle; font-size: 11px; padding: 4px; background: #fff; line-height: 1.2; }
+</style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <button class="back-btn" onclick="window.location.href='index.html'">← 返回</button>
+      <br/><br/>
+      <div class="session-select">
+        <select id="sessionSelector"></select>
+        <button onclick="querySelectedSession()">查詢</button>
+      </div>
+      <h1>📊 訂單統計與管理</h1>
+      <p id="restaurantName">⏳ 載入中，請稍候...</p>
+      <div id="loading"></div>
+      <table id="orderTable">
+        <thead>
+          <tr><th>序</th><th>代號</th><th>餐點</th><th>備註</th><th>改</th></tr>
+        </thead>
+        <tbody id="orderTableBody"></tbody>
+      </table>
+      <div class="stats-container">
+        <h2>🍜 餐點統計</h2>
+        <table id="itemStatsTable">
+  <thead>
+    <tr>
+      <th>品項</th>
+      <th>數量</th>
+      <th>訂購人  
+      <button id="TPView" class="update-btn" style="background: #666767; font-size:12px;">  排</button>
+      </th> 
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<p id="totalCount"></p>
+
+    </div>
+      <h2 style="text-align: center; margin-bottom: 12px;">🔦 確認訂餐總表</h2>
+      <table id="lightTable"></table>
+    </div>
+    </div>
+  
+  <script>
+    const firebaseConfig = {
+  apiKey: "//FIREBASE///",
+  authDomain: "//FIREBASE///",
+  projectId: "//FIREBASE///",
+  storageBucket: "//FIREBASE///",
+  messagingSenderId: "//FIREBASE///",
+  appId: "//FIREBASE///"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let currentSessionId = "", unsubscribeOrders = null, statsViewMode = "item";
+let codeNameMap = {}, ordersCache = [];
+
+// 初始化：載入下拉選單
+async function populateSessionSelector() {
+  const selector = document.getElementById("sessionSelector");
+  const sessions = await db.collection("sessions").orderBy("timeCreated", "desc").limit(7).get();
+
+  if (sessions.empty) {
+    document.getElementById("restaurantName").textContent = "⚠️ 尚無任何開團記錄";
+    return;
+  }
+
+  const latestDoc = sessions.docs[0];
+  const latestData = latestDoc.data();
+  const restaurant = latestData.restaurantName || "未命名";
+
+document.getElementById("restaurantName").innerHTML = `
+🍽️ 今日餐廳：<a href="addoredit.html?restaurant=${encodeURIComponent(restaurant)}"
+   style="color:inherit;text-decoration:none;cursor:pointer;"> ${restaurant}</a>`;
+
+  // 2. 渲染下拉選單 
+  selector.innerHTML = sessions.docs.map(doc => {
+    const { timeCreated, restaurantName = "未命名" } = doc.data();
+    const date = timeCreated?.toDate();
+    const mmdd = date ? `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}` : "??/??";
+    return `<option value="${doc.id}" data-fullname="${restaurantName}">${mmdd} ${restaurantName.substring(0, 2)}</option>`;
+  }).join('');
+
+  currentSessionId = latestDoc.id;
+  loadOrders(currentSessionId);
+}
+
+// 查詢選定場次
+function querySelectedSession() {
+  const selector = document.getElementById("sessionSelector");
+  const selectedOption = selector.selectedOptions[0];
+  
+  currentSessionId = selector.value;
+
+  const fullName = selectedOption.dataset.fullname;
+  document.getElementById("restaurantName").innerHTML = `
+🍽️ 餐廳查詢：<a href="addoredit.html?restaurant=${encodeURIComponent(fullName)}"
+   style="color:inherit;text-decoration:none;cursor:pointer;"> ${fullName} </a>`;
+  
+  loadOrders(currentSessionId);
+}
+
+// 核心：監聽訂單數據
+function loadOrders(sessionId) {
+  const [tbody, loading, table] = ["orderTableBody", "loading", "orderTable"].map(id => document.getElementById(id));
+  
+  if (unsubscribeOrders) unsubscribeOrders();
+  loading.style.display = "block";
+  table.style.display = "none";
+
+  unsubscribeOrders = db.collection("orders").doc(sessionId).collection("items").orderBy("time").onSnapshot(async (snapshot) => {
+    let totalAmount = 0;
+    ordersCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    tbody.innerHTML = ordersCache.map((data, i) => {
+      const { item = "（未填）", note = "", code = "", time } = data;
+      const timeStr = time ? time.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : "--:--";
+      const price = parseInt(item.match(/(\d+)\s*元/)?.[1] || 0);
+      totalAmount += price;
+
+      return `
+        <tr>
+          <td><div>${i + 1}</div><div style="font-size:12px;color:#666;">${timeStr}</div></td>
+          <td><input type="text" value="${code}" disabled></td>
+          <td><textarea rows="2" class="edit-item">${item}</textarea></td>
+          <td><textarea rows="2" class="edit-note">${note}</textarea></td>
+          <td>
+            <div class="action-buttons">
+              <button class="update-btn" onclick="updateOrder('${data.id}', this)">存</button>
+              <button class="delete-btn" onclick="deleteOrder('${data.id}')">刪</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById("totalCount").innerHTML = `📦 總共 ${ordersCache.length} 份餐點 💰 總金額 ${totalAmount} 元`;
+    loading.style.display = "none";
+    table.style.display = "table";
+    
+    renderItemStatsTable();
+    await buildDynamicLightTable(ordersCache.map(o => o.code));
+  });
+}
+
+// 渲染統計表格
+// 渲染統計表格 (改進版：考慮備註分開統計)
+function renderItemStatsTable() {
+  const tbody = document.querySelector("#itemStatsTable tbody");
+  
+  if (statsViewMode === "item") {
+    // 1. 按餐點統計模式：使用 "餐點|備註" 作為 Key 分開統計
+    const stats = ordersCache.reduce((acc, { item = "（未填）", note = "", code = "" }) => {
+      const trimmedNote = note.trim();
+      const groupKey = trimmedNote ? `${item}|${trimmedNote}` : item;
+
+      if (!acc[groupKey]) {
+        acc[groupKey] = { 
+          itemName: item, 
+          note: trimmedNote, 
+          count: 0, 
+          codes: [] 
+        };
+      }
+      acc[groupKey].count++;
+      if (code) acc[groupKey].codes.push(code);
+      return acc;
+    }, {});
+
+    tbody.innerHTML = Object.values(stats)
+      .sort((a, b) => a.itemName.localeCompare(b.itemName))
+      .map(info => {
+        const displayTitle = info.note 
+          ? `${info.itemName}<br><span style="color: #de6800; font-size: 1em;">(${info.note})</span>` 
+          : info.itemName;
+
+        return `
+          <tr>
+            <td style="text-align:center"><span>${displayTitle}</span></td>
+            <td style="text-align:center">${info.count} 份</td>
+            <td><span>${info.codes.join("、")}</span></td>
+          </tr>`;
+      }).join('');
+
+  } else {
+    // 2. 依人員檢視模式
+    const byPerson = ordersCache.reduce((acc, { item = "（未填）", note = "", code = "" }) => {
+      if (!acc[code]) acc[code] = [];
+      
+      // 修正點：判斷備註並執行換行與格式化
+      const trimmedNote = note.trim();
+      const displayItem = trimmedNote 
+        ? `${item}<br><span style="color: #de6800; font-size: 1em;">(${trimmedNote})</span>` 
+        : item;
+        
+      acc[code].push(displayItem);
+      return acc;
+    }, {});
+
+    tbody.innerHTML = Object.entries(byPerson).sort().map(([code, items]) => 
+      items.map((item, i) => `
+        <tr>
+          <td style="text-align:center"><span>${item}</span></td>
+          <td style="text-align:center">1 份</td>
+          ${i === 0 ? `<td rowspan="${items.length}" style="text-align:center;vertical-align:middle;">${code} ${codeNameMap[code] || ""}</td>` : ""}
+        </tr>`).join('')
+    ).join('');
+  }
+}
+
+// 動態座位表
+async function buildDynamicLightTable(orderCodes = []) {
+  const [sizeDoc, staffSnap] = await Promise.all([
+    db.collection("staffList").doc("tableSize").get(),
+    db.collection("staffList").get()
+  ]);
+
+  const { rows = 0, cols = 0 } = sizeDoc.data() || {};
+  const staff = staffSnap.docs.map(d => d.data());
+  
+  // 代碼映射表
+  codeNameMap = Object.fromEntries(staff.map(s => [s.code, s.name]));
+
+  const table = document.getElementById("lightTable");
+  table.innerHTML = Array.from({ length: rows }, (_, r) => `
+    <tr>
+      ${Array.from({ length: cols }, (_, c) => {
+        const p = staff.find(u => u.seatRow === r && u.seatCol === c);
+        const active = p && orderCodes.includes(p.code) ? 'style="background:#8fdf82"' : '';
+        return `<td ${active}>${p ? `${p.name}<br><small>${p.code}</small>` : '　'}</td>`;
+      }).join('')}
+    </tr>`).join('');
+}
+
+// 操作：更新與刪除
+async function updateOrder(id, btn) {
+  const row = btn.closest("tr");
+  const item = row.querySelector(".edit-item").value.trim();
+  const note = row.querySelector(".edit-note").value.trim();
+  
+  await db.collection("orders").doc(currentSessionId).collection("items").doc(id).update({ item, note });
+  Swal.fire({ icon: "success", title: "更新成功", timer: 1000, showConfirmButton: false });
+}
+
+async function deleteOrder(id) {
+  const { isConfirmed } = await Swal.fire({
+    icon: "warning",
+    title: "確定刪除？",
+    showCancelButton: true,
+    confirmButtonText: "刪除"
+  });
+  
+  if (isConfirmed) {
+    await db.collection("orders").doc(currentSessionId).collection("items").doc(id).delete();
+    Swal.fire({ icon: "success", title: "已刪除", timer: 1000, showConfirmButton: false });
+  }
+}
+
+// 事件綁定
+document.getElementById("TPView").onclick = () => {
+  statsViewMode = statsViewMode === "item" ? "person" : "item";
+  renderItemStatsTable();
+};
+
+populateSessionSelector();
+  </script>
+</body>
+</html>
