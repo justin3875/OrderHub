@@ -68,9 +68,10 @@ firebase.initializeApp({
 const db=firebase.firestore();
 const seatTable=document.getElementById("seatTable");
 const loading=document.getElementById("loading");
+const rows=document.getElementById("rows");
+const cols=document.getElementById("cols");
 
 let members=[];
-let memberOptionsHTML="";
 
 /* ---------- GRID ---------- */
 
@@ -115,9 +116,7 @@ function editSeat(cell){
   <div class="member-picker">
    <input id="memberSearch" class="swal2-input member-search" placeholder="🔍 搜尋姓名或代號">
    <div class="member-list-wrap">
-    <select id="memberList" class="member-list" size="8">
-    ${memberOptionsHTML}
-    </select>
+    <select id="memberList" class="member-list" size="8"></select>
    </div>
   </div>
   `,
@@ -130,32 +129,63 @@ function editSeat(cell){
 
    const search=document.getElementById("memberSearch");
    const select=document.getElementById("memberList");
+   const frag=document.createDocumentFragment();
+
+   /* 已有座位的人 */
+const usedCodes=new Set(
+ [...seatTable.querySelectorAll("td")]
+ .map(td=>td.dataset.code)
+ .filter(Boolean)
+);
+
+members.forEach(m=>{
+
+ /* 如果已有座位就跳過 */
+ if(usedCodes.has(m.code) && m.code!==cell.dataset.code) return;
+
+ const opt=document.createElement("option");
+ opt.value=m.code;
+ opt.textContent=`${m.code} ${m.name}`;
+ frag.appendChild(opt);
+
+});
+
+   select.appendChild(frag);
 
    if(cell.dataset.code) select.value=cell.dataset.code;
 
    search.addEventListener("input",()=>{
     const q=search.value.toLowerCase();
+
     [...select.options].forEach(o=>{
      const t=o.text.toLowerCase();
-     o.style.display=t.includes(q)?"":"none";
+     o.hidden=!t.includes(q);   // 修正第2點
     });
+
    });
 
   }
 
- }).then(res=>{
+ }).then(async res=>{
 
+  /* 清空座位 */
   if(res.isDenied){
+
+   if(cell.dataset.code){
+    await db.collection("staffList").doc(cell.dataset.code).delete();
+   }
+
    cell.innerHTML="";
    delete cell.dataset.code;
    delete cell.dataset.name;
    delete cell.dataset.extension;
-   saveSeats();
    return;
   }
 
+  /* 取消 */
   if(!res.isConfirmed) return;
 
+  /* 指派人員 */
   const code=document.getElementById("memberList").value;
   const m=members.find(x=>x.code===code);
   if(!m) return;
@@ -202,29 +232,24 @@ async function saveSeats(){
 
 window.onload=async()=>{
 
- const [memberSnap,staffSnap]=await Promise.all([
+ const [memberSnap,tableSizeDoc,seatSnap]=await Promise.all([
   db.collection("members").get(),
-  db.collection("staffList").get()
+  db.collection("staffList").doc("tableSize").get(),
+  db.collection("staffList").where("seatRow",">=",0).get()
  ]);
 
  members=memberSnap.docs
-  .map(d=>d.data())
-  .sort((a,b)=>a.code.localeCompare(b.code));
+ .map(d=>d.data())
+ .sort((a,b)=>a.code.localeCompare(b.code));
 
- memberOptionsHTML=members
-  .map(m=>`<option value="${m.code}">${m.code} ${m.name}</option>`)
-  .join("");
+ const tableSize=tableSizeDoc.exists?tableSizeDoc.data():null;
 
- const tableSize=staffSnap.docs.find(d=>d.id==="tableSize");
-
- rows.value=tableSize?tableSize.data().rows:7;
- cols.value=tableSize?tableSize.data().cols:6;
+ rows.value=tableSize?tableSize.rows:7;
+ cols.value=tableSize?tableSize.cols:6;
 
  await generateGrid();
 
- staffSnap.forEach(doc=>{
-
-  if(doc.id==="tableSize") return;
+ seatSnap.forEach(doc=>{
 
   const d=doc.data();
   const cell=seatTable.rows[d.seatRow]?.cells[d.seatCol];
