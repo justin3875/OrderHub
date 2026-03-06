@@ -1,151 +1,265 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>成員管理</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成員管理</title>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; font-family: "Helvetica Neue", Arial, sans-serif; background: linear-gradient(135deg, #f5f7fa, #c3cfe2); color: #333; }
-
-    .wrapper { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 20px; }
-    .card { position: relative; background: #fff; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); max-width: 420px; width: 100%; padding: 30px 20px; }
-
-    .back-btn { position: absolute; top: 10px; left: 10px; padding: 6px 10px; font-size: 14px; background: #2980b9; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-    .back-btn:hover { background: #2471A3; }
-
-    h1 { text-align: center; margin-bottom: 24px; font-size: 24px; color: #2c3e50; }
-
-    .input-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
-    .input-row input, .input-row select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
-
-    #codeInput { width: 50px; }
-    #groupInput { width: 80px; }
-    #nameInput { width: 110px; }
-    #extInput { width: 60px; }
-
-    .add-btn { width: 32px; height: 32px; font-size: 20px; background: #1abc9c; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-    .add-btn:hover { background: #149174; }
-
-    .group-title { font-weight: bold; margin: 16px 0 8px; font-size: 16px; color: #2c3e50; }
-
-    ul { list-style: none; margin-bottom: 12px; }
-    li { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 8px 12px; margin-bottom: 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-    .info { flex: 1; }
-
-    .delete-btn { width: 28px; height: 28px; font-size: 14px; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-    .delete-btn:hover { background: #c0392b; }
-
-    @media (max-width: 480px) {
-      .input-row { flex-direction: column; }
-      .input-row input, .input-row select, .add-btn { width: 100%; }
-    }
-  </style>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:Arial;background:linear-gradient(135deg,#f5f7fa,#c3cfe2)}
+.wrapper{display:flex;align-items:center;justify-content:center;min-height:100%;padding:20px}
+.card{position:relative;background:#fff;border-radius:12px;box-shadow:0 8px 16px rgba(0,0,0,.1);max-width:420px;width:100%;padding:40px 20px 20px}
+.top-left{position:absolute;top:10px;left:10px;display:flex;gap:6px}
+.top-left button{padding:6px 10px;border:none;border-radius:6px;color:#fff;cursor:pointer}
+.back-btn{background:#2980b9}
+.group-btn{background:#16a085}
+.lighttable-btn{position:absolute;top:10px;right:10px;padding:6px 10px;background:#8e44ad;color:#fff;border:none;border-radius:6px;cursor:pointer}
+h1{text-align:center;margin-bottom:24px}
+.input-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:20px}
+.input-row input,.input-row select{padding:8px;border:1px solid #ccc;border-radius:6px}
+#codeInput{width:50px}
+#groupInput{width:90px}
+#nameInput{width:110px}
+#extInput{width:60px}
+.add-btn{width:32px;height:32px;font-size:20px;background:#1abc9c;color:#fff;border:none;border-radius:6px;cursor:pointer}
+.group-title{font-weight:bold;margin:16px 0 8px}
+ul{list-style:none;margin-bottom:12px}
+li{display:flex;justify-content:space-between;align-items:center;background:#f9f9f9;padding:8px 12px;margin-bottom:6px;border:1px solid #ddd;border-radius:6px}
+.delete-btn{background:#e74c3c;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer}
+.modal{position:absolute;top:60px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #ddd;border-radius:10px;padding:15px;width:260px;box-shadow:0 8px 20px rgba(0,0,0,.15);display:none}
+.group-row{display:flex;justify-content:space-between;margin-bottom:6px}
+.group-row button{background:#e74c3c;border:none;color:#fff;border-radius:4px;padding:2px 6px;cursor:pointer}
+.new-group{display:flex;gap:4px;margin-top:10px}
+.new-group input{flex:1;padding:4px}
+.new-group button{background:#1abc9c;border:none;color:#fff;border-radius:4px;padding:4px 8px;cursor:pointer}
+.close-btn{margin-top:8px;width:100%;background:#aaa;color:#fff;border:none;padding:5px;border-radius:4px;cursor:pointer}
+</style>
 </head>
 
 <body>
-  <div class="wrapper">
-    <div class="card">
-      <button class="back-btn" onclick="location.href='admin.html'">← 返回</button>
-      <h1>👥 成員管理</h1>
 
-      <div class="input-row">
-        <input id="codeInput" placeholder="代號" />
-        <select id="groupInput">
-          <option value="">分類</option>
-          <option value="分類一">分類一</option>
-          <option value="分類二">分類二</option>
-          <option value="分類三">分類三</option>
-          <option value="分類四">分類四</option>
-        </select>
-        <input id="nameInput" placeholder="人名" />
-        <input
-          id="extInput"
-          placeholder="分機"
-          inputmode="numeric"
-          maxlength="3"
-          oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,3)"
-        />
-        <button class="add-btn" onclick="addMember()">＋</button>
-      </div>
+<div class="wrapper">
+<div class="card">
 
-      <div id="memberSections"></div>
-    </div>
-  </div>
+<div class="top-left">
+<button class="back-btn" onclick="location.href='admin.html'">← 返回</button>
+<button class="group-btn" onclick="toggleGroup()">群</button>
+</div>
 
-  <script>
-    firebase.initializeApp({
-      apiKey: "//FIREBASE///",
-      authDomain: "//FIREBASE///",
-      projectId: "//FIREBASE///"
-    });
-    const db = firebase.firestore();
+<button class="lighttable-btn" onclick="location.href='lighttable.html'">Light</button>
 
-    const codeInput = document.getElementById("codeInput");
-    const nameInput = document.getElementById("nameInput");
-    const groupInput = document.getElementById("groupInput");
-    const extInput = document.getElementById("extInput");
-    const memberSections = document.getElementById("memberSections");
+<h1>👥 成員管理</h1>
 
-    async function addMember() {
-      const code = codeInput.value.trim();
-      const name = nameInput.value.trim();
-      const ext = extInput.value.trim();
-      const group = groupInput.value;
+<div class="input-row">
 
-      if (!code || !name || !group) return alert("請輸入完整資料與分類！");
-      if (ext && !/^\d{1,3}$/.test(ext)) return alert("分機僅能 1～3 碼數字");
+<input id="codeInput" placeholder="代號">
 
-      const doc = await db.collection("members").doc(code).get();
-      if (doc.exists) return alert("此代號已存在！");
+<select id="groupInput"></select>
 
-      const data = { code, name, group };
-      if (ext) data.ext = ext;
+<input id="nameInput" placeholder="人名">
 
-      await db.collection("members").doc(code).set(data);
-      [codeInput, nameInput, extInput].forEach(i => i.value = "");
-      groupInput.value = "";
-      loadMembers();
-    }
+<input id="extInput"
+placeholder="分機"
+maxlength="3"
+oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,3)"
+>
 
-    async function loadMembers() {
-      const snapshot = await db.collection("members").get();
-      memberSections.innerHTML = "";
+<button class="add-btn" onclick="addMember()">＋</button>
 
-      const groups = { 主管室: [], 營業員: [], 後台: [], 其他: [] };
-      snapshot.forEach(doc => groups[doc.data().group]?.push({ id: doc.id, ...doc.data() }));
+</div>
 
-      Object.entries(groups).forEach(([group, members]) => {
-        memberSections.insertAdjacentHTML("beforeend", `<div class="group-title">📌 ${group}</div>`);
-        const ul = document.createElement("ul");
+<div id="memberSections"></div>
 
-        if (!members.length) {
-          ul.innerHTML = `<li style="color:#999">尚無資料</li>`;
-        } else {
-          members.forEach(m => {
-            ul.insertAdjacentHTML("beforeend", `
-              <li>
-                <div class="info">${m.code} ${m.name}${m.ext ? `（分機 ${m.ext}）` : ""}</div>
-                <button class="delete-btn" onclick="deleteMember('${m.id}')">✕</button>
-              </li>
-            `);
-          });
-        }
-        memberSections.appendChild(ul);
-      });
-    }
+<div id="groupModal" class="modal">
 
-    async function deleteMember(id) {
-      await db.collection("members").doc(id).delete();
-      loadMembers();
-    }
+<h3 style="text-align:center;margin-bottom:10px;">群組管理</h3>
 
-    loadMembers();
-  </script>
+<div id="groupList"></div>
+
+<div class="new-group">
+<input id="newGroupInput" placeholder="新增群組">
+<button onclick="addGroup()">＋</button>
+</div>
+
+<button class="close-btn" onclick="toggleGroup()">關閉</button>
+
+</div>
+
+</div>
+</div>
+
+<script>
+
+firebase.initializeApp({
+apiKey:"AIzaSyBKa7p8mE6-feCyeBPBEZlKkE6ZHGJI5Ak",
+authDomain:"ibfs-lunch.firebaseapp.com",
+projectId:"ibfs-lunch"
+})
+
+const db=firebase.firestore()
+
+const groupsRef=db.collection("members").doc("groups").collection("groups")
+
+const groupModal=document.getElementById("groupModal")
+const groupList=document.getElementById("groupList")
+
+const codeInput=document.getElementById("codeInput")
+const nameInput=document.getElementById("nameInput")
+const groupInput=document.getElementById("groupInput")
+const extInput=document.getElementById("extInput")
+
+const newGroupInput=document.getElementById("newGroupInput")
+const memberSections=document.getElementById("memberSections")
+
+function toggleGroup(){
+
+groupModal.style.display=
+groupModal.style.display==="block"?"none":"block"
+
+if(groupModal.style.display==="block")loadGroups()
+
+}
+
+async function loadGroups(){
+
+const snap=await groupsRef.get()
+
+groupInput.innerHTML='<option value="">分類</option>'
+groupList.innerHTML=""
+
+snap.forEach(doc=>{
+
+const g=doc.id
+
+groupInput.insertAdjacentHTML(
+"beforeend",
+`<option value="${g}">${g}</option>`
+)
+
+groupList.insertAdjacentHTML(
+"beforeend",
+`<div class="group-row">${g}
+<button onclick="deleteGroup('${g}')">✕</button>
+</div>`
+)
+
+})
+
+loadMembers()
+
+}
+
+async function addGroup(){
+
+const name=newGroupInput.value.trim()
+
+if(!name)return
+
+await groupsRef.doc(name).set({})
+
+newGroupInput.value=""
+
+loadGroups()
+
+}
+
+async function deleteGroup(name){
+
+if(!confirm("刪除群組？"))return
+
+await groupsRef.doc(name).delete()
+
+loadGroups()
+
+}
+
+async function addMember(){
+
+const code=codeInput.value.trim()
+const name=nameInput.value.trim()
+const ext=extInput.value.trim()
+const group=groupInput.value
+
+if(!code||!name||!group)
+return alert("請輸入完整資料")
+
+const doc=await db.collection("members").doc(code).get()
+
+if(doc.exists)
+return alert("代號已存在")
+
+const data={code,name,group}
+
+if(ext)data.ext=ext
+
+await db.collection("members").doc(code).set(data)
+
+codeInput.value=""
+nameInput.value=""
+extInput.value=""
+
+loadMembers()
+
+}
+
+async function loadMembers(){
+
+const snapshot=await db.collection("members").get()
+
+memberSections.innerHTML=""
+
+const groups={}
+
+snapshot.forEach(doc=>{
+
+if(doc.id==="groups")return
+
+const d=doc.data()
+
+if(!groups[d.group])groups[d.group]=[]
+
+groups[d.group].push({id:doc.id,...d})
+
+})
+
+Object.entries(groups).forEach(([g,members])=>{
+
+memberSections.insertAdjacentHTML(
+"beforeend",
+`<div class="group-title">📌 ${g}</div>`
+)
+
+const ul=document.createElement("ul")
+
+members.forEach(m=>{
+
+ul.insertAdjacentHTML("beforeend",`
+<li>
+<div>${m.code} ${m.name}${m.ext?`（分機 ${m.ext}）`:''}</div>
+<button class="delete-btn" onclick="deleteMember('${m.id}')">✕</button>
+</li>
+`)
+
+})
+
+memberSections.appendChild(ul)
+
+})
+
+}
+
+async function deleteMember(id){
+await db.collection("members").doc(id).delete()
+loadMembers()
+}
+
+loadGroups()
+
+</script>
+
 </body>
 </html>
