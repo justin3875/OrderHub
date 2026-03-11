@@ -31,11 +31,14 @@ ul{list-style:none;margin-bottom:12px}
 li{display:flex;justify-content:space-between;align-items:center;background:#f9f9f9;padding:8px 12px;margin-bottom:6px;border:1px solid #ddd;border-radius:6px}
 .delete-btn{background:#e74c3c;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer}
 .modal{position:absolute;top:60px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #ddd;border-radius:10px;padding:15px;width:260px;box-shadow:0 8px 20px rgba(0,0,0,.15);display:none}
-.group-row{display:flex;justify-content:space-between;margin-bottom:6px}
-.group-row button{background:#e74c3c;border:none;color:#fff;border-radius:4px;padding:2px 6px;cursor:pointer}
+.group-row{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.group-actions{display:flex;gap:6px}
+.edit-btn{background:#3498db;border:none;color:#fff;border-radius:4px;padding:2px 6px;cursor:pointer}
+.delete-btn{background:#e74c3c;border:none;color:#fff;border-radius:4px;padding:2px 6px;cursor:pointer}
 .new-group{display:flex;gap:4px;margin-top:10px}
 .new-group input{flex:1;padding:4px}
 .new-group button{background:#1abc9c;border:none;color:#fff;border-radius:4px;padding:4px 8px;cursor:pointer}
+.group-edit{width:10px;flex:1;padding:4px;border:1px solid #ccc;border-radius:4px}
 .close-btn{margin-top:8px;width:100%;background:#aaa;color:#fff;border:none;padding:5px;border-radius:4px;cursor:pointer}
 </style>
 </head>
@@ -95,9 +98,9 @@ oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,3)"
 <script>
 
 firebase.initializeApp({
-apiKey:"\\firebase\\",
-authDomain:"\\firebase\\",
-projectId:"\\firebase\\"
+apiKey:"\\FIREBASE\\",
+authDomain:"\\FIREBASE\\",
+projectId:"\\FIREBASE\\"
 })
 
 const db=firebase.firestore()
@@ -142,8 +145,12 @@ groupInput.insertAdjacentHTML(
 
 groupList.insertAdjacentHTML(
 "beforeend",
-`<div class="group-row">${g}
-<button onclick="deleteGroup('${g}')">✕</button>
+`<div class="group-row" id="group-${g}">
+<span class="g-name">${g}</span>
+<div class="group-actions">
+<button class="edit-btn" onclick="editGroup('${g}')">✏️</button>
+<button class="delete-btn" onclick="deleteGroup('${g}')">✕</button>
+</div>
 </div>`
 )
 
@@ -257,6 +264,61 @@ await db.collection("members").doc(id).delete()
 loadMembers()
 }
 
+function editGroup(oldName){
+const row=document.getElementById("group-"+oldName)
+row.innerHTML=`
+<input id="edit-${oldName}" class="group-edit" value="${oldName}">
+<div class="group-actions">
+<button class="edit-btn" onclick="saveGroup('${oldName}')">💾</button>
+<button class="delete-btn" onclick="loadGroups()">✕</button>
+</div>
+`
+}
+
+async function saveGroup(oldName){
+
+const input=document.getElementById("edit-"+oldName)
+
+const newName=input.value.trim()
+
+if(!newName)return alert("名稱不可空白")
+
+if(newName===oldName){
+loadGroups()
+return
+}
+
+const newRef=groupsRef.doc(newName)
+
+const oldRef=groupsRef.doc(oldName)
+
+const exist=await newRef.get()
+
+if(exist.exists)
+return alert("群組名稱已存在")
+
+/* 建立新群組 */
+await newRef.set({})
+
+/* 更新 members group */
+const members=await db.collection("members")
+.where("group","==",oldName)
+.get()
+
+const batch=db.batch()
+
+members.forEach(doc=>{
+batch.update(doc.ref,{group:newName})
+})
+
+await batch.commit()
+
+/* 刪除舊群組 */
+await oldRef.delete()
+
+loadGroups()
+
+}
 loadGroups()
 
 </script>

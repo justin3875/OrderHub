@@ -95,12 +95,12 @@
   
   <script>
     const firebaseConfig = {
-  apiKey: "//FIREBASE///",
-  authDomain: "//FIREBASE///",
-  projectId: "//FIREBASE///",
-  storageBucket: "//FIREBASE///",
-  messagingSenderId: "//FIREBASE///",
-  appId: "//FIREBASE///"
+  apiKey: "\\FIREBASE\\",
+  authDomain: "\\FIREBASE\\",
+  projectId: "\\FIREBASE\\",
+  storageBucket: "\\FIREBASE\\",
+  messagingSenderId: "\\FIREBASE\\",
+  appId: "\\FIREBASE\\"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -236,29 +236,70 @@ function renderItemStatsTable() {
       }).join('');
 
   } else {
-    // 2. 依人員檢視模式
-    const byPerson = ordersCache.reduce((acc, { item = "（未填）", note = "", code = "" }) => {
-      if (!acc[code]) acc[code] = [];
-      
-      // 修正點：判斷備註並執行換行與格式化
-      const trimmedNote = note.trim();
-      const displayItem = trimmedNote 
-        ? `${item}<br><span style="color: #de6800; font-size: 1em;">(${trimmedNote})</span>` 
-        : item;
-        
-      acc[code].push(displayItem);
-      return acc;
-    }, {});
 
-    tbody.innerHTML = Object.entries(byPerson).sort().map(([code, items]) => 
-      items.map((item, i) => `
-        <tr>
-          <td style="text-align:center"><span>${item}</span></td>
-          <td style="text-align:center">1 份</td>
-          ${i === 0 ? `<td rowspan="${items.length}" style="text-align:center;vertical-align:middle;">${code} ${codeNameMap[code] || ""}</td>` : ""}
-        </tr>`).join('')
-    ).join('');
-  }
+  // 依群組 + 人員檢視
+  const groupMap = {}
+
+  ordersCache.forEach(({item="（未填）",note="",code="",group=""})=>{
+
+    const g = group || "未分類"
+
+    if(!groupMap[g]) groupMap[g] = {}
+
+    if(!groupMap[g][code]) groupMap[g][code] = []
+
+    const trimmedNote = note.trim()
+
+    const displayItem = trimmedNote
+      ? `${item}<br><span style="color:#de6800;">(${trimmedNote})</span>`
+      : item
+
+    groupMap[g][code].push(displayItem)
+
+  })
+
+
+  let html=""
+
+  Object.keys(groupMap)
+  .sort((a,b)=>a.localeCompare(b,'zh-Hant-u-co-stroke')) // 群組筆畫排序
+  .forEach((group,i)=>{
+
+    const persons = groupMap[group]
+
+    html+=`
+    <tr style="background:#e8ecef;font-weight:bold;text-align:center;font-size:15px;">
+    <td colspan="3">${group}</td>
+    </tr>
+    `
+
+    Object.entries(persons)
+    .sort((a,b)=>a[0].localeCompare(b[0])) // 代號排序
+    .forEach(([code,items])=>{
+
+      items.forEach((item,idx)=>{
+
+        html+=`
+          <tr>
+            <td style="text-align:center">${item}</td>
+            <td style="text-align:center">1 份</td>
+            ${idx===0
+              ? `<td rowspan="${items.length}" style="text-align:center;vertical-align:middle;">
+                   ${code} ${codeNameMap[code]||""}
+                 </td>`
+              : ""
+            }
+          </tr>
+        `
+
+      })
+
+    })
+
+  })
+
+  tbody.innerHTML = html
+}
 }
 
 // 動態座位表

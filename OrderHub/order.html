@@ -14,236 +14,6 @@
   <!-- SweetAlert2 -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-  <script>
-  const firebaseConfig = {
-    apiKey: "//FIREBASE///",
-    authDomain: "//FIREBASE///",
-    projectId: "//FIREBASE///",
-    storageBucket: "//FIREBASE///",
-    messagingSenderId: "//FIREBASE///",
-    appId: "//FIREBASE///"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-
-  let currentSessionId = "";
-  let menuItems = [];
-  let groupedMembers = {};
-  let sessionUnsubscribe = null;
-
-  async function loadMembers() {
-    const snapshot = await db.collection("members").get();
-    groupedMembers = {};
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const group = data.group || "其他";
-      if (!groupedMembers[group]) groupedMembers[group] = [];
-      groupedMembers[group].push({ code: data.code, name: data.name });
-    });
-  }
-
-  // 新增：監聽關團
-  function listenSessionClosed(sessionId) {
-    if (sessionUnsubscribe) sessionUnsubscribe();
-    sessionUnsubscribe = db.collection("sessions").doc(sessionId)
-      .onSnapshot(doc => {
-        const data = doc.data();
-        if (data && data.closed) {
-          Swal.fire({
-            icon: 'warning',
-            title: '已經關團',
-            text: '訂餐已關團，若要加點請聯絡開團者',
-            allowOutsideClick: false,
-          }).then(() => {
-            window.location.href = 'index.html';
-          });
-        }
-      });
-  }
-
-  async function loadTodaySession() {
-    await loadMembers();
-    const snapshot = await db.collection("sessions").orderBy("timeCreated", "desc").limit(1).get();
-    const title = document.getElementById("restaurantName");
-
-    if (!snapshot.empty) {
-      const doc = snapshot.docs[0];
-      currentSessionId = doc.id;
-      listenSessionClosed(currentSessionId); // 新增監聽
-
-      const restaurant = doc.data().restaurantName || "（未命名餐廳）";
-      title.innerText = `🍽️ 今日餐廳：${restaurant}`;
-
-      const imageUrl = doc.data().imageUrl;
-      if (imageUrl) {
-        const imgContainer = document.getElementById("restaurantImageContainer");
-        imgContainer.innerHTML = `<img src="${imageUrl}" alt="今日餐廳圖片" />`;
-      }
-
-      const menuDoc = await db.collection("menus").doc(currentSessionId).get();
-      if (menuDoc.exists) {
-        menuItems = menuDoc.data().menu || [];
-        addOrderInput();
-        document.getElementById("addBtn").disabled = false;
-        document.getElementById("submitBtn").disabled = false;
-      }
-    } else {
-      title.innerText = "⚠️ 今天尚未開團";
-    }
-  }
-
-  function buildMemberSelect() {
-    const select = document.createElement("select");
-    select.innerHTML = `<option disabled selected value="">代號</option>`;
-    const groupOrder = ["主管室", "營業員", "後台", "其他"];
-    groupOrder.forEach(group => {
-      if (groupedMembers[group]) {
-        const optGroup = document.createElement("optgroup");
-        optGroup.label = `----${group}----`;
-        groupedMembers[group].forEach(member => {
-          const opt = document.createElement("option");
-          opt.value = member.code;
-          opt.textContent = `${member.code} ${member.name}`;
-          optGroup.appendChild(opt);
-        });
-        select.appendChild(optGroup);
-      }
-    });
-    return select;
-  }
-
-  function addOrderInput() {
-    const container = document.getElementById("orderContainer");
-    const block = document.createElement("div");
-    block.className = "order-block";
-
-    const menuSelect = document.createElement("select");
-    menuSelect.innerHTML = '<option value="">請選擇餐點</option>';
-    menuItems.forEach(item => {
-      const option = document.createElement("option");
-      option.value = item;
-      option.textContent = item;
-      menuSelect.appendChild(option);
-    });
-
-    const noteRow = document.createElement("div");
-    noteRow.className = "note-row";
-
-    const codeSelect = buildMemberSelect();
-    const noteInput = document.createElement("input");
-    noteInput.type = "text";
-    noteInput.placeholder = "備註（可留空）";
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "delete-btn";
-    delBtn.textContent = "刪除";
-    delBtn.onclick = () => {
-      block.remove();
-      updateDeleteButtons();
-    };
-
-    // 自動帶入第一筆的代號
-    const allBlocks = document.querySelectorAll(".order-block");
-    if (allBlocks.length >= 1) {
-      const firstCode = allBlocks[0].querySelector(".note-row select").value;
-      if (firstCode) codeSelect.value = firstCode;
-    }
-
-    noteRow.appendChild(codeSelect);
-    noteRow.appendChild(noteInput);
-    noteRow.appendChild(delBtn);
-
-    block.appendChild(menuSelect);
-    block.appendChild(noteRow);
-    container.appendChild(block);
-    updateDeleteButtons();
-  }
-
-  function updateDeleteButtons() {
-    const blocks = document.querySelectorAll(".order-block");
-    document.querySelectorAll(".delete-btn").forEach(btn => {
-      btn.style.display = (blocks.length > 1) ? "inline-block" : "none";
-    });
-  }
-
-  async function submitOrder() {
-    const submitBtn = document.getElementById("submitBtn");
-    const addBtn = document.getElementById("addBtn");
-    const blocks = document.querySelectorAll(".order-block");
-
-    submitBtn.disabled = true;
-    addBtn.disabled = true;
-    submitBtn.textContent = "送出中…";
-    document.querySelectorAll(".delete-btn").forEach(btn => btn.disabled = true);
-
-    try {
-      // 提交前再檢查一次是否已經關團
-      const sessionDoc = await db.collection("sessions").doc(currentSessionId).get();
-      if (sessionDoc.data().closed) {
-        Swal.fire({
-          icon: 'warning',
-          title: '已經關團',
-          text: '本次訂餐已經關團，請回首頁',
-          allowOutsideClick: false,
-        }).then(() => {
-          window.location.href = 'index.html';
-        });
-        return;
-      }
-
-      for (const block of blocks) {
-        const item = block.querySelector("select").value;
-        const code = block.querySelector(".note-row select").value;
-        const note = block.querySelector(".note-row input").value.trim();
-
-        if (!item) {
-          alert("請選擇餐點！");
-          throw new Error("餐點未填寫");
-        }
-        if (!code) {
-          alert("請選擇代號！");
-          throw new Error("代號未填寫");
-        }
-
-        await db.collection("orders")
-          .doc(currentSessionId)
-          .collection("items")
-          .add({
-            item,
-            code,
-            note,
-            time: firebase.firestore.FieldValue.serverTimestamp()
-          });
-      }
-
-      Swal.fire({
-        icon: 'success',
-        title: '訂餐成功！',
-        text: '要前往統計頁確認嗎？',
-        showCancelButton: true,
-        confirmButtonText: '📊 前往統計',
-        cancelButtonText: '🍱 繼續點餐',
-      }).then((result) => {
-        if (result.isConfirmed) {
-          window.location.href = 'summary.html';
-        } else {
-          location.reload();
-        }
-      });
-
-    } catch (e) {
-      console.error("❌ 送出失敗：", e.message);
-      submitBtn.disabled = false;
-      addBtn.disabled = false;
-      submitBtn.textContent = "送出訂單";
-      document.querySelectorAll(".delete-btn").forEach(btn => btn.disabled = false);
-    }
-  }
-
-  window.onload = loadTodaySession;
-</script>
-
-
   <style>
     /* ====== 全局重置 ====== */
     * {
@@ -450,5 +220,357 @@
       <div id="restaurantImageContainer"></div>
     </div>
   </div>
+<script>
+const firebaseConfig = {
+apiKey:"\\FIREBASE\\",
+authDomain:"\\FIREBASE\\",
+projectId:"\\FIREBASE\\",
+storageBucket:"\\FIREBASE\\",
+messagingSenderId:"\\FIREBASE\\",
+appId:"\\FIREBASE\\"
+}
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig)
+}
+const db=firebase.firestore()
+
+let currentSessionId=""
+let menuItems=[]
+let groupedMembers={}
+let memberGroupMap={}
+let sessionUnsubscribe=null
+
+
+async function loadMembers(){
+
+const snapshot=await db.collection("members").get()
+
+groupedMembers={}
+memberGroupMap={}
+
+snapshot.forEach(doc=>{
+
+if(doc.id==="groups")return
+
+const data=doc.data()
+const group=data.group||"其他"
+
+if(!groupedMembers[group])groupedMembers[group]=[]
+
+groupedMembers[group].push({
+code:data.code,
+name:data.name,
+group:group
+})
+
+memberGroupMap[data.code]=group
+
+})
+
+}
+
+
+
+function listenSessionClosed(sessionId){
+
+if(sessionUnsubscribe)sessionUnsubscribe()
+
+sessionUnsubscribe=db.collection("sessions")
+.doc(sessionId)
+.onSnapshot(doc=>{
+
+const data=doc.data()
+
+if(data && data.closed){
+
+Swal.fire({
+icon:'warning',
+title:'已經關團',
+text:'訂餐已關團，若要加點請聯絡開團者',
+allowOutsideClick:false
+}).then(()=>{
+window.location.href='index.html'
+})
+
+}
+
+})
+
+}
+
+
+
+async function loadTodaySession(){
+
+await loadMembers()
+
+const snapshot=await db.collection("sessions")
+.orderBy("timeCreated","desc")
+.limit(1)
+.get()
+
+const title=document.getElementById("restaurantName")
+
+if(!snapshot.empty){
+
+const doc=snapshot.docs[0]
+
+currentSessionId=doc.id
+
+listenSessionClosed(currentSessionId)
+
+const restaurant=doc.data().restaurantName||"（未命名餐廳）"
+
+title.innerText=`🍽️ 今日餐廳：${restaurant}`
+
+const imageUrl=doc.data().imageUrl
+
+if(imageUrl){
+
+const imgContainer=document.getElementById("restaurantImageContainer")
+
+imgContainer.innerHTML=`<img src="${imageUrl}" alt="今日餐廳圖片"/>`
+
+}
+
+const menuDoc=await db.collection("menus").doc(currentSessionId).get()
+
+if(menuDoc.exists){
+
+menuItems=menuDoc.data().menu||[]
+
+addOrderInput()
+
+document.getElementById("addBtn").disabled=false
+document.getElementById("submitBtn").disabled=false
+
+}
+
+}else{
+
+title.innerText="⚠️ 今天尚未開團"
+
+}
+
+}
+
+
+
+function buildMemberSelect(){
+
+const select=document.createElement("select")
+
+select.innerHTML=`<option disabled selected value="">代號</option>`
+
+Object.keys(groupedMembers)
+.sort((a,b)=>a.localeCompare(b,'zh-Hant-u-co-stroke'))
+.forEach(group=>{
+
+const optGroup=document.createElement("optgroup")
+
+optGroup.label=`----${group}----`
+
+groupedMembers[group].forEach(member=>{
+
+const opt=document.createElement("option")
+
+opt.value=member.code
+opt.textContent=`${member.code} ${member.name}`
+
+optGroup.appendChild(opt)
+
+})
+
+select.appendChild(optGroup)
+
+})
+
+return select
+
+}
+
+
+
+function addOrderInput(){
+
+const container=document.getElementById("orderContainer")
+
+const block=document.createElement("div")
+block.className="order-block"
+
+const menuSelect=document.createElement("select")
+menuSelect.className="menu-select"
+
+menuSelect.innerHTML='<option value="">請選擇餐點</option>'
+
+menuItems.forEach(item=>{
+const option=document.createElement("option")
+option.value=item
+option.textContent=item
+menuSelect.appendChild(option)
+})
+
+const noteRow=document.createElement("div")
+noteRow.className="note-row"
+
+const codeSelect=buildMemberSelect()
+
+const noteInput=document.createElement("input")
+noteInput.type="text"
+noteInput.placeholder="備註（可留空）"
+
+const delBtn=document.createElement("button")
+delBtn.className="delete-btn"
+delBtn.textContent="刪除"
+
+delBtn.onclick=()=>{
+block.remove()
+updateDeleteButtons()
+}
+
+const allBlocks=document.querySelectorAll(".order-block")
+
+if(allBlocks.length>0){
+
+const firstCode=allBlocks[0].querySelector(".note-row select").value
+
+if(firstCode)codeSelect.value=firstCode
+
+}
+
+noteRow.appendChild(codeSelect)
+noteRow.appendChild(noteInput)
+noteRow.appendChild(delBtn)
+
+block.appendChild(menuSelect)
+block.appendChild(noteRow)
+
+container.appendChild(block)
+
+updateDeleteButtons()
+
+}
+
+
+
+function updateDeleteButtons(){
+
+const blocks=document.querySelectorAll(".order-block")
+
+document.querySelectorAll(".delete-btn").forEach(btn=>{
+
+btn.style.display=(blocks.length>1)?"inline-block":"none"
+
+})
+
+}
+
+
+
+async function submitOrder(){
+
+const submitBtn=document.getElementById("submitBtn")
+const addBtn=document.getElementById("addBtn")
+
+const blocks=document.querySelectorAll(".order-block")
+
+submitBtn.disabled=true
+addBtn.disabled=true
+
+submitBtn.textContent="送出中…"
+
+document.querySelectorAll(".delete-btn").forEach(btn=>btn.disabled=true)
+
+try{
+
+const sessionDoc=await db.collection("sessions").doc(currentSessionId).get()
+const sessionData=sessionDoc.data()
+
+if(sessionData && sessionData.closed){
+
+Swal.fire({
+icon:'warning',
+title:'已經關團',
+text:'本次訂餐已經關團，請回首頁',
+allowOutsideClick:false
+}).then(()=>{
+window.location.href='index.html'
+})
+
+return
+}
+
+const batch=db.batch()
+
+for(const block of blocks){
+
+const item=block.querySelector(".menu-select").value
+const code=block.querySelector(".note-row select").value
+const note=block.querySelector(".note-row input").value.trim()
+
+const group=memberGroupMap[code]||""
+
+if(!item){
+alert("請選擇餐點！")
+throw new Error("餐點未填寫")
+}
+
+if(!code){
+alert("請選擇代號！")
+throw new Error("代號未填寫")
+}
+
+const ref=db.collection("orders")
+.doc(currentSessionId)
+.collection("items")
+.doc()
+
+batch.set(ref,{
+item,
+code,
+group,
+note,
+time:firebase.firestore.FieldValue.serverTimestamp()
+})
+
+}
+
+await batch.commit()
+
+Swal.fire({
+icon:'success',
+title:'訂餐成功！',
+text:'要前往統計頁確認嗎？',
+showCancelButton:true,
+confirmButtonText:'📊 前往統計',
+cancelButtonText:'🍱 繼續點餐'
+}).then((result)=>{
+
+if(result.isConfirmed){
+window.location.href='summary.html'
+}else{
+location.reload()
+}
+
+})
+
+}catch(e){
+
+console.error("❌ 送出失敗：",e.message)
+
+submitBtn.disabled=false
+addBtn.disabled=false
+
+submitBtn.textContent="送出訂單"
+
+document.querySelectorAll(".delete-btn").forEach(btn=>btn.disabled=false)
+
+}
+
+}
+
+window.onload=loadTodaySession
+</script>
 </body>
 </html>
